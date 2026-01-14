@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多機能市場グラフエディター</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f1f5f9; }
+        #finalImage {
+            max-width: 100%;
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+            background-color: white;
+        }
+        .series-card { transition: all 0.2s; }
+        .series-card:hover { border-color: #3b82f6; }
+        .data-input {
+            width: 100%;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 4px 8px;
+            text-align: right;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto space-y-8">
+        
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-slate-800 tracking-tight">多機能グラフエディター</h1>
+                <p class="text-slate-500 mt-1">曲線をなくし、直線で結ぶ折れ線グラフに調整しました。</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="manualRefreshImage()" class="bg-slate-800 hover:bg-slate-900 text-white px-5 py-3 rounded-2xl font-bold shadow-lg transition-all active:scale-95 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    画像を更新
+                </button>
+                <button onclick="downloadImage()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg transition-all active:scale-95 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    PNGを保存
+                </button>
+            </div>
+        </div>
+
+        <!-- PNG Output Display -->
+        <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+            <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                出力プレビュー (PNG画像)
+            </h2>
+            <div class="flex flex-col items-center gap-4 bg-slate-50 rounded-2xl p-4 min-h-[400px] justify-center border border-dashed border-slate-300">
+                <img id="finalImage" alt="生成されたグラフ">
+                <p id="refreshNotice" class="text-xs text-slate-400">※グラフを変更した後は「画像を更新」ボタンを押してください</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-1 space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700">グラフ項目の設定</h3>
+                    <button onclick="addSeries()" class="text-xs bg-white border border-slate-200 px-3 py-1 rounded-full font-bold hover:bg-slate-50 text-blue-600 transition-colors shadow-sm">
+                        + 項目を追加
+                    </button>
+                </div>
+                <div id="seriesList" class="space-y-3"></div>
+            </div>
+
+            <div class="lg:col-span-2 space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700">データ編集</h3>
+                    <button onclick="addRow()" class="text-xs bg-white border border-slate-200 px-3 py-1 rounded-full font-bold hover:bg-slate-50 text-slate-600 transition-colors shadow-sm">
+                        + 年度を追加
+                    </button>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-50 border-b border-slate-200">
+                                <tr id="tableHeader"></tr>
+                            </thead>
+                            <tbody id="tableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="position: absolute; left: -9999px;">
+            <canvas id="hiddenCanvas" width="1200" height="700"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let years = ["H21", "H22", "H23", "H24", "H25", "H26", "H27", "H28", "H29", "H30", "R1", "R2", "R3", "R4", "R5", "R6", "R7"];
+        let seriesList = [
+            { 
+                name: "数量 (kg)", 
+                color: "#2563eb", 
+                data: [2004813, 1777915, 1866044, 1846222, 1848649, 1664650, 1640009, 1648812, 1697254, 1743248, 1543934, 1281391, 1574367, 1566058, 1402372, 1363484, 1284872], 
+                yAxis: 'yLeft' 
+            },
+            { 
+                name: "単価 (円)", 
+                color: "#dc2626", 
+                data: [1314, 1380, 1302, 1324, 1256, 1205, 1117, 1150, 1206, 1078, 1009, 971, 1069, 973, 927, 926, 1586], 
+                yAxis: 'yRight' 
+            }
+        ];
+
+        let chart;
+        const canvas = document.getElementById('hiddenCanvas');
+        const finalImg = document.getElementById('finalImage');
+
+        function init() {
+            const ctx = canvas.getContext('2d');
+            const whiteBg = {
+                id: 'whiteBg',
+                beforeDraw: (c) => {
+                    const ctx = c.ctx;
+                    ctx.save();
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, c.width, c.height);
+                    ctx.restore();
+                }
+            };
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: years,
+                    datasets: [] 
+                },
+                options: {
+                    responsive: false,
+                    devicePixelRatio: 2,
+                    scales: {
+                        yLeft: { 
+                            type: 'linear', 
+                            position: 'left', 
+                            title: { display: true, text: '数量 (kg)', font: { weight: 'bold', size: 14 } } 
+                        },
+                        yRight: { 
+                            type: 'linear', 
+                            position: 'right', 
+                            title: { display: true, text: '平均単価 (円)', font: { weight: 'bold', size: 14 } }, 
+                            grid: { drawOnChartArea: false } 
+                        }
+                    }
+                },
+                plugins: [whiteBg]
+            });
+
+            updateAll();
+            setTimeout(manualRefreshImage, 500);
+        }
+
+        function updateAll() {
+            const listEl = document.getElementById('seriesList');
+            listEl.innerHTML = '';
+            seriesList.forEach((s, i) => {
+                const div = document.createElement('div');
+                div.className = "series-card bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3";
+                div.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <input type="text" value="${s.name}" oninput="seriesList[${i}].name=this.value; updateChart();" class="font-bold text-sm text-slate-700 bg-transparent border-none p-0 focus:ring-0 w-32">
+                        <button onclick="removeSeries(${i})" class="text-slate-300 hover:text-red-500 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <input type="color" value="${s.color}" oninput="seriesList[${i}].color=this.value; updateChart();" class="w-6 h-6 p-0 border-none bg-transparent cursor-pointer">
+                        <select onchange="seriesList[${i}].yAxis=this.value; updateChart();" class="text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-slate-50">
+                            <option value="yLeft" ${s.yAxis==='yLeft'?'selected':''}>左軸</option>
+                            <option value="yRight" ${s.yAxis==='yRight'?'selected':''}>右軸</option>
+                        </select>
+                    </div>
+                `;
+                listEl.appendChild(div);
+            });
+
+            const header = document.getElementById('tableHeader');
+            header.innerHTML = `<th class="px-4 py-3 text-center text-slate-500 w-24">年度</th>`;
+            seriesList.forEach(s => {
+                header.innerHTML += `<th class="px-4 py-3 text-right text-slate-500">${s.name}</th>`;
+            });
+            header.innerHTML += `<th class="w-12"></th>`;
+
+            const body = document.getElementById('tableBody');
+            body.innerHTML = '';
+            years.forEach((y, rowIdx) => {
+                const tr = document.createElement('tr');
+                let cells = `<td class="px-2 py-1"><input type="text" value="${y}" oninput="years[rowIdx]=this.value; updateChart();" class="data-input font-bold text-center text-slate-600 bg-slate-50/50"></td>`;
+                seriesList.forEach((s, colIdx) => {
+                    cells += `<td class="px-2 py-1"><input type="number" value="${s.data[rowIdx]}" oninput="seriesList[colIdx].data[${rowIdx}]=parseFloat(this.value); updateChart();" class="data-input"></td>`;
+                });
+                cells += `<td class="px-2 py-1 text-center"><button onclick="removeRow(${rowIdx})" class="text-slate-300 hover:text-red-500">×</button></td>`;
+                tr.innerHTML = cells;
+                body.appendChild(tr);
+            });
+
+            updateChart();
+        }
+
+        function updateChart() {
+            chart.data.labels = years;
+            chart.data.datasets = seriesList.map(s => ({
+                label: s.name,
+                data: s.data,
+                borderColor: s.color,
+                backgroundColor: 'transparent',
+                yAxisID: s.yAxis,
+                borderWidth: 3,
+                tension: 0, // 0に設定して直線を強制
+                pointRadius: 4,
+                fill: false
+            }));
+            chart.update('none');
+        }
+
+        function manualRefreshImage() {
+            chart.update();
+            setTimeout(() => {
+                const dataUrl = canvas.toDataURL('image/png');
+                finalImg.src = dataUrl;
+                
+                const notice = document.getElementById('refreshNotice');
+                notice.textContent = "プレビュー画像を更新しました！";
+                notice.classList.replace('text-slate-400', 'text-green-600');
+                setTimeout(() => {
+                    notice.textContent = "※グラフを変更した後は「画像を更新」ボタンを押してください";
+                    notice.classList.replace('text-green-600', 'text-slate-400');
+                }, 2000);
+            }, 100);
+        }
+
+        function addSeries() {
+            seriesList.push({ name: "新項目", color: "#64748b", data: new Array(years.length).fill(0), yAxis: 'yLeft' });
+            updateAll();
+        }
+
+        function removeSeries(i) {
+            seriesList.splice(i, 1);
+            updateAll();
+        }
+
+        function addRow() {
+            years.push("新年度");
+            seriesList.forEach(s => s.data.push(0));
+            updateAll();
+        }
+
+        function removeRow(i) {
+            years.splice(i, 1);
+            seriesList.forEach(s => s.data.splice(i, 1));
+            updateAll();
+        }
+
+        function downloadImage() {
+            const link = document.createElement('a');
+            link.download = `市場分析グラフ_${new Date().getTime()}.png`;
+            link.href = finalImg.src;
+            link.click();
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
+
