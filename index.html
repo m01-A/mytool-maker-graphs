@@ -243,11 +243,11 @@
 
         // --- Storage ---
         function saveToStorage() {
-            localStorage.setItem('linechart_state_v4', JSON.stringify({ labels, seriesList }));
+            localStorage.setItem('linechart_state_v5', JSON.stringify({ labels, seriesList }));
         }
 
         function loadSavedData() {
-            const saved = localStorage.getItem('linechart_state_v4');
+            const saved = localStorage.getItem('linechart_state_v5');
             if (saved) {
                 const parsed = JSON.parse(saved);
                 labels = parsed.labels;
@@ -256,8 +256,9 @@
         }
 
         function resetToDefault() {
-            if (!confirm("入力されたすべてのデータと設定を消去します。よろしいですか？")) return;
-            localStorage.removeItem('linechart_state_v4');
+            const confirmModal = confirm("入力されたすべてのデータと設定を消去します。よろしいですか？");
+            if (!confirmModal) return;
+            localStorage.removeItem('linechart_state_v5');
             location.reload();
         }
 
@@ -274,13 +275,13 @@
                 };
                 history.unshift(entry);
                 if (history.length > 15) history.pop();
-                localStorage.setItem('linechart_history_v4', JSON.stringify(history));
+                localStorage.setItem('linechart_history_v5', JSON.stringify(history));
                 updateHistoryUI();
             }, 200);
         }
 
         function loadHistory() {
-            const saved = localStorage.getItem('linechart_history_v4');
+            const saved = localStorage.getItem('linechart_history_v5');
             if (saved) history = JSON.parse(saved);
         }
 
@@ -296,14 +297,14 @@
         function deleteHistory(id, e) {
             e.stopPropagation();
             history = history.filter(h => h.id !== id);
-            localStorage.setItem('linechart_history_v4', JSON.stringify(history));
+            localStorage.setItem('linechart_history_v5', JSON.stringify(history));
             updateHistoryUI();
         }
 
         function clearAllHistory() {
             if (!confirm("履歴をすべて削除しますか？")) return;
             history = [];
-            localStorage.removeItem('linechart_history_v4');
+            localStorage.removeItem('linechart_history_v5');
             updateHistoryUI();
         }
 
@@ -353,9 +354,15 @@
 
                 for (let i = 1; i < lines.length; i++) {
                     const cols = lines[i].split(delimiter).map(s => s.trim());
+                    // 1列目（ラベル）は文字列としてそのまま保持
                     newLabels.push(cols[0] || `行 ${i}`);
+                    
                     for (let j = 0; j < newSeriesList.length; j++) {
-                        newSeriesList[j].data.push(parseFloat(cols[j+1]) || 0);
+                        const valStr = cols[j+1] || "0";
+                        // 数値以外の文字（カンマや￥、$など）を除去してパース
+                        // ただしマイナス記号と小数点は維持
+                        const cleanVal = valStr.replace(/[^-0.9.]/g, '');
+                        newSeriesList[j].data.push(parseFloat(cleanVal) || 0);
                     }
                 }
 
