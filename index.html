@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>折れ線メーカー</title>
+    <title>折れ線メーカー ver.04</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -35,7 +35,7 @@
 
         .data-input {
             width: 100%;
-            min-width: 80px;
+            min-width: 100px;
             border: 1px solid #e2e8f0;
             border-radius: 8px;
             padding: 8px;
@@ -81,7 +81,7 @@
         <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 px-4 py-3 md:py-6">
             <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
-                    <h1 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">折れ線メーカー</h1>
+                    <h1 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">折れ線メーカー <span class="text-sm font-normal text-slate-400">ver.04</span></h1>
                     <p id="refreshNotice" class="text-xs text-slate-400 mt-1">データはブラウザに自動保存されます</p>
                 </div>
                 
@@ -230,8 +230,27 @@
                     animation: false,
                     devicePixelRatio: 2,
                     scales: {
-                        yLeft: { type: 'linear', position: 'left', title: { display: true, text: '左軸', font: { weight: 'bold', size: 14 } } },
-                        yRight: { type: 'linear', position: 'right', title: { display: true, text: '右軸', font: { weight: 'bold', size: 14 } }, grid: { drawOnChartArea: false } }
+                        yLeft: { 
+                            type: 'linear', 
+                            position: 'left', 
+                            display: 'auto',
+                            title: { 
+                                display: true, 
+                                text: '左軸', 
+                                font: { weight: 'bold', size: 14 } 
+                            } 
+                        },
+                        yRight: { 
+                            type: 'linear', 
+                            position: 'right', 
+                            display: 'auto',
+                            title: { 
+                                display: true, 
+                                text: '右軸', 
+                                font: { weight: 'bold', size: 14 } 
+                            }, 
+                            grid: { drawOnChartArea: false } 
+                        }
                     },
                     plugins: {
                         legend: { position: 'top', labels: { font: { size: 14, weight: 'bold' }, padding: 20 } }
@@ -341,28 +360,37 @@
                 if (lines.length < 2) return;
 
                 const delimiter = text.includes('\t') ? '\t' : (text.includes(',') ? ',' : ';');
-                const header = lines[0].split(delimiter).map(s => s.trim());
+                
+                const grid = lines.map(line => line.split(delimiter).map(cell => cell.trim()));
+                const header = grid[0];
                 
                 const newLabels = [];
                 const newSeriesList = header.slice(1).map((name, i) => ({
                     name: name || `系列 ${i+1}`,
-                    color: i === 0 ? '#3b82f6' : (i === 1 ? '#ef4444' : '#64748b'),
+                    color: i === 0 ? '#3b82f6' : (i === 1 ? '#ef4444' : (i === 2 ? '#10b981' : '#64748b')),
                     data: [],
                     yAxis: 'yLeft',
                     hidden: false
                 }));
 
-                for (let i = 1; i < lines.length; i++) {
-                    const cols = lines[i].split(delimiter).map(s => s.trim());
-                    // 1列目（ラベル）は文字列としてそのまま保持
-                    newLabels.push(cols[0] || `行 ${i}`);
+                for (let i = 1; i < grid.length; i++) {
+                    const row = grid[i];
+                    newLabels.push(row[0] || `行 ${i}`);
                     
                     for (let j = 0; j < newSeriesList.length; j++) {
-                        const valStr = cols[j+1] || "0";
-                        // 数値以外の文字（カンマや￥、$など）を除去してパース
-                        // ただしマイナス記号と小数点は維持
-                        const cleanVal = valStr.replace(/[^-0.9.]/g, '');
-                        newSeriesList[j].data.push(parseFloat(cleanVal) || 0);
+                        let cellValue = row[j+1] || "0";
+                        
+                        cellValue = cellValue.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(s) {
+                            return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+                        });
+
+                        // カンマ除去ロジック
+                        let cleanValue = cellValue
+                            .replace(/(\d),(\d)/g, '$1$2') 
+                            .replace(/[^0-9.\-eE]/g, ''); // 科学的記法(e)も許容
+                        
+                        const num = parseFloat(cleanValue);
+                        newSeriesList[j].data.push(isNaN(num) ? 0 : num);
                     }
                 }
 
@@ -429,7 +457,8 @@
                     </td>`;
 
                 seriesList.forEach((s, colIdx) => {
-                    rowHtml += `<td><input type="number" value="${s.data[rowIdx]}" oninput="seriesList[${colIdx}].data[${rowIdx}]=parseFloat(this.value) || 0; updateChartData();" class="data-input ${s.hidden ? 'opacity-10' : ''}" ${s.hidden ? 'disabled' : ''}></td>`;
+                    // 桁数制限なしの入力を可能にするため step="any" を指定
+                    rowHtml += `<td><input type="number" step="any" value="${s.data[rowIdx]}" oninput="seriesList[${colIdx}].data[${rowIdx}]=parseFloat(this.value) || 0; updateChartData();" class="data-input ${s.hidden ? 'opacity-10' : ''}" ${s.hidden ? 'disabled' : ''}></td>`;
                 });
 
                 rowHtml += `<td class="text-center"><button onclick="removeRow(${rowIdx})" class="text-slate-300 hover:text-red-500 font-bold text-xl">×</button></td>`;
@@ -440,6 +469,23 @@
 
         function updateChartData() {
             saveToStorage();
+
+            // 表示中の系列を軸ごとに取得
+            const activeLeft = seriesList.filter(s => !s.hidden && s.yAxis === 'yLeft').map(s => s.name);
+            const activeRight = seriesList.filter(s => !s.hidden && s.yAxis === 'yRight').map(s => s.name);
+
+            // スケールリセットと軸タイトルの更新
+            if (chart.options.scales.yLeft) {
+                chart.options.scales.yLeft.min = undefined;
+                chart.options.scales.yLeft.max = undefined;
+                chart.options.scales.yLeft.title.text = activeLeft.length > 0 ? activeLeft.join(', ') : '左軸';
+            }
+            if (chart.options.scales.yRight) {
+                chart.options.scales.yRight.min = undefined;
+                chart.options.scales.yRight.max = undefined;
+                chart.options.scales.yRight.title.text = activeRight.length > 0 ? activeRight.join(', ') : '右軸';
+            }
+
             chart.data.labels = labels;
             chart.data.datasets = seriesList
                 .filter(s => !s.hidden)
